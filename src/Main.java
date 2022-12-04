@@ -1,50 +1,39 @@
 import java.util.*;
+import java.util.concurrent.*;
 
 public class Main {
-
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
         String[] texts = new String[25];
         for (int i = 0; i < texts.length; i++) {
             texts[i] = generateText("aab", 30_000);
         }
 
-        List<Thread> threads = new ArrayList<>(25);
+        final ExecutorService threadPool = Executors.newFixedThreadPool(texts.length);
+        List<Future<String>> futures = new ArrayList<>(texts.length);
 
         long startTs = System.currentTimeMillis(); // start time
         for (String text : texts) {
-            Runnable logicCode = () -> {
-                int maxSize = 0;
-                for (int i = 0; i < text.length(); i++) {
-                    for (int j = 0; j < text.length(); j++) {
-                        if (i >= j) {
-                            continue;
-                        }
-                        boolean bFound = false;
-                        for (int k = i; k < j; k++) {
-                            if (text.charAt(k) == 'b') {
-                                bFound = true;
-                                break;
-                            }
-                        }
-                        if (!bFound && maxSize < j - i) {
-                            maxSize = j - i;
-                        }
-                    }
-                }
-                System.out.println(text.substring(0, 100) + " -> " + maxSize);
-            };
-            Thread thread = new Thread(logicCode);
-            threads.add(thread);
-            thread.start();
+            Callable<String> myCallable = new MyCallable(text);
+            final Future<String> future = threadPool.submit(myCallable);
+            futures.add(future);
         }
 
-        for (Thread thread : threads) {
-            thread.join(); // зависаем, ждём когда поток объект которого лежит в thread завершится
+        for (Future<String> future : futures) {
+            final String result = future.get();
+            String valueFromText = result.substring(result.lastIndexOf("-> ") + 3);
+            int valueText = Integer.parseInt(valueFromText);
+            if (valueText==MyCallable.valueMax) {
+                System.out.println(result);
+//                return; // если нужен только один вариант строки с максимальным интервалом значений
+            }
         }
+
+//        System.out.println(MyCallable.valueMax); // можно напрямую получить Максимальный интервал значений
 
         long endTs = System.currentTimeMillis(); // end time
 
         System.out.println("Time: " + (endTs - startTs) + "ms");
+        threadPool.shutdown();
     }
 
     public static String generateText(String letters, int length) {
